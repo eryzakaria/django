@@ -1,0 +1,46 @@
+name: Build and Push to Docker Registry
+ 
+on:
+  push:
+    branches:
+      - main
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image version'
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      
+      - name: Build and push Docker image
+        run: |
+          docker build -t myapp:latest .
+          docker tag myapp:latest eryzakaria14/django:latest
+          docker push eryzakaria14/django:latest
+
+      - name: Deploy to Server
+        env:
+          DEPLOY_USER: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_SERVER: ${{ secrets.DEPLOY_HOST }}
+          SSHKEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo "${SSHKEY}" > private_key
+          chmod 600 private_key
+
+          ssh -i private_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_SERVER 'bash -s' << 'EOF'
+            set -e
+            if docker ps -q --filter "name=django"; then
+              docker stop django
+              docker rm django
+            fi
+             docker run -d --name django -p 8000:8000--restart always "eryzakaria14/django:latest"
+          EOF
+
+          rm private_key
