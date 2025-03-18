@@ -43,7 +43,7 @@ jobs:
               docker stop django
               docker rm django
             fi
-             docker run -d --name django -p 8000:8000 --restart always "eryzakaria14/django:latest"
+             docker run -d --name django -p 8009:8000 --restart always "eryzakaria14/django:latest"
           EOF
 
           rm private_key
