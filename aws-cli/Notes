@@ -1,0 +1,84 @@
+aws ec2 create-launch-template \
+    --launch-template-name instances-scale \
+    --version-description "Initial version" \
+    --launch-template-data '{"ImageId":"ami-0ad26513fce70843d","InstanceType":"t3.micro","KeyName":"apps-instance","SecurityGroupIds":["sg-0ee919d5dd50cb75f"]}'
+
+aws autoscaling create-auto-scaling-group \
+    --auto-scaling-group-name MyASG \
+    --launch-template "LaunchTemplateName=instances-scale,Version=1" \
+    --min-size 1 \
+    --max-size 5 \
+    --desired-capacity 2 \
+    --vpc-zone-identifier "subnet-09fd7a3ca49f9392e,subnet-04badb68404708e46" \
+    --target-group-arns "arn:aws:elasticloadbalancing:ap-southeast-3:582608286091:targetgroup/alb-groups/fdf9b340e1763303" \
+    --region ap-southeast-3
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name HighCPUAlarm \
+    --alarm-description "Alarm when CPU exceeds 80%" \
+    --metric-name CPUUtilization \
+    --namespace AWS/EC2 \
+    --statistic Average \
+    --period 300 \
+    --threshold 80 \
+    --comparison-operator GreaterThanOrEqualToThreshold \
+    --dimensions "Name=AutoScalingGroupName,Value=MyASG" \
+    --evaluation-periods 1 \
+    --alarm-actions "arn:aws:sns:ap-southeast-3:582608286091:MySNSTopic" \
+    --region ap-southeast-3
+
+
+aws sns create-topic --name MySNSTopic --region ap-southeast-3
+aws sns subscribe \
+    --topic-arn arn:aws:sns:ap-southeast-3:582608286091:MySNSTopic \
+    --protocol email \
+    --notification-endpoint eryzakariatrimadhani14@gmail.com \
+    --region ap-southeast-3
+
+scaleout
+aws autoscaling put-scaling-policy \
+    --policy-name ScaleOutPolicy \
+    --auto-scaling-group-name MyASG \
+    --scaling-adjustment 1 \
+    --adjustment-type ChangeInCapacity \
+    --cooldown 300 \
+    --region ap-southeast-3
+
+scalein
+aws autoscaling put-scaling-policy \
+    --policy-name ScaleInPolicy \
+    --auto-scaling-group-name MyASG \
+    --scaling-adjustment -1 \
+    --adjustment-type ChangeInCapacity \
+    --cooldown 300 \
+    --region ap-southeast-3
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name HighCPUAlarm \
+    --alarm-description "Alarm when CPU exceeds 80%" \
+    --metric-name CPUUtilization \
+    --namespace AWS/EC2 \
+    --statistic Average \
+    --period 300 \
+    --threshold 80 \
+    --comparison-operator GreaterThanOrEqualToThreshold \
+    --dimensions "Name=AutoScalingGroupName,Value=MyASG" \
+    --evaluation-periods 1 \
+    --alarm-actions $(aws autoscaling describe-policies --auto-scaling-group-name MyASG --query 'ScalingPolicies[?PolicyName==`ScaleOutPolicy`].PolicyARN' --output text) \
+    --region ap-southeast-3
+
+aws cloudwatch put-metric-alarm \
+    --alarm-name LowCPUAlarm \
+    --alarm-description "Alarm when CPU is below 30%" \
+    --metric-name CPUUtilization \
+    --namespace AWS/EC2 \
+    --statistic Average \
+    --period 300 \
+    --threshold 30 \
+    --comparison-operator LessThanOrEqualToThreshold \
+    --dimensions "Name=AutoScalingGroupName,Value=MyASG" \
+    --evaluation-periods 1 \
+    --alarm-actions $(aws autoscaling describe-policies --auto-scaling-group-name MyASG --query 'ScalingPolicies[?PolicyName==`ScaleInPolicy`].PolicyARN' --output text) \
+    --region ap-southeast-3
+
+stress --cpu 2 => untuk stress test terkait server
